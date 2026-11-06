@@ -1,0 +1,33 @@
+name: GuardX
+version: '${project.version}'
+main: dev.guardx.GuardX
+authors: [Vunlior]
+api-version: '1.16'
+description: Anti-cheat for Paper servers (built-in packet layer, PacketEvents optional) / Античит для Paper (встроенный пакетный слой, PacketEvents необязателен)
+softdepend:
+  - packetevents
+  - PlaceholderAPI
+commands:
+  guardx:
+    description: GuardX anti-cheat management / Управление античитом GuardX
+    aliases: [gx]
+    usage: /guardx <help|reload|alerts|debug|info|inspect|report|reports|close|history|dump|goto|top|reset|exempt|stats|layers|notifytest|netcheck|netrevoke|netlist|diagnostics|checks>
+  report:
+    description: Report a cheater / Пожаловаться на читера
+    usage: /report <player> <reason>
+permissions:
+  guardx.admin:
+    description: Manage GuardX (reload, info, inspect, reports, close, history, dump, goto, top, reset) / Управление GuardX
+    default: op
+  guardx.report:
+    description: Report players (/report) / Подавать жалобы на игроков
+    default: true
+  guardx.alerts:
+    description: Receive violation alerts / Получать оповещения о нарушениях
+    default: op
+  guardx.network.ban:
+    description: Admin bans and unbans issued with commands are recorded in the server network / Баны и разбаны этого администратора попадают в сеть серверов
+    default: op
+  guardx.bypass:
+    description: Bypass all checks (nobody by default, not even OP) / Обход всех проверок (по умолчанию ни у кого, даже у OP)
+    default: false

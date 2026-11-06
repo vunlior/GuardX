@@ -1,0 +1,490 @@
+# ============================================================
+#  GuardX — anti-cheat settings
+#  Tip: if players get false positives, first increase `buffer`
+#  of the affected check instead of disabling it entirely.
+# ============================================================
+
+# Roll the player back to the last safe position on a movement violation
+setback: true
+
+# Punishment
+punish:
+  enabled: true
+  # How many VL (violation points) one check needs to reach
+  vl: 25
+  # Command run by the console. %player%, %check%, %reason% (localized text) and %count% are substituted automatically
+  command: "kick %player% [GuardX] %reason%"
+  # Repeat offenders: after this many punishments (per server uptime) the strict command below
+  # runs instead of the normal one. Empty command = disabled. Example: "tempban %player% 7d [GuardX] %reason%"
+  repeat:
+    count: 3
+    command: ""
+  # Total threshold: if a player reaches this many VL across ALL checks combined, they are punished
+  # (catches cheats that raise many small flags across different checks). 0 = disabled.
+  total-vl: 60
+
+# Player reports: /report <player> <reason> (or /guardx report ...)
+reports:
+  cooldown-seconds: 30        # pause between reports from the same player
+  duplicate-minutes: 10       # a repeat report on the same player by the same author is rejected
+  min-reason-length: 3
+  max-reason-length: 100
+  max-stored: 300             # how many reports to keep in reports.yml
+  # Reported players are watched more closely: their new VL is multiplied by this factor for the given time
+  suspect-minutes: 10
+  suspect-vl-multiplier: 1.5  # 1.0 = disabled
+  # If N DIFFERENT players reported the same player within the window, all moderators get a separate alert
+  threshold:
+    count: 3
+    window-minutes: 15
+    # Optional command when the threshold is reached (e.g. "spectate ..." or a temporary ban). Empty = disabled.
+    command: ""
+  # Auto-reports: the anti-cheat creates a report itself when a player's total VL passes the threshold
+  auto:
+    enabled: true
+    vl: 40
+    cooldown-minutes: 5
+
+# False-positive protection during server lag: if TPS is below this value,
+# movement and attack checks are temporarily paused. 0 = disabled (requires Paper).
+lag-protect:
+  min-tps: 16.0
+
+# How thin a strip under the feet counts as "ground" (blocks).
+# The smaller, the more precisely Fly/NoFall are caught (it used to be 0.5 — hovering 0.4 blocks above the ground went unnoticed).
+ground-height: 0.2
+
+# Lag compensation for Reach and KillAura: the target is looked up where it was "ping" ms ago
+lag-compensation:
+  max-ping-ms: 400   # ping above this value is ignored (protection against artificial lag)
+  extra-ms: 100      # margin for client interpolation
+
+# How many VL the counter decreases every 10 seconds
+vl-decay-per-10s: 1.0
+
+# Minimum pause between alerts about the same check (ms)
+alert-cooldown-ms: 700
+
+# Write violations to plugins/GuardX/violations.log
+log-to-file: true
+# When the file exceeds this size (MB) it is renamed to violations.old.log. 0 = unlimited
+log-max-size-mb: 5
+
+# Clicking an alert in chat teleports the moderator to the player (requires the guardx.admin permission)
+alert-click-teleport: true
+
+# Message language: ru or en. Files are in plugins/GuardX/lang/ (you can edit them or add your own, e.g. de.yml).
+language: en
+
+# Discord alerts (webhook: Channel settings -> Integrations -> Webhooks -> Copy URL)
+discord:
+  enabled: false
+  webhook-url: ""
+  username: "GuardX"
+  notify:
+    punish: true      # player punishment
+    reports: true     # player reports and auto-reports
+    threshold: true   # report threshold for one player
+    network: true     # player banned on another server of the network
+
+# Telegram alerts (bot: @BotFather -> /newbot; get the chat id e.g. from @userinfobot or via getUpdates).
+# Same events and texts as Discord. Check your setup with: /guardx notifytest
+telegram:
+  enabled: false
+  bot-token: ""          # bot token like 123456789:AAE...
+  chat-id: ""            # id of the chat, group or channel (groups and channels start with -100)
+  thread-id: 0           # topic number in a group with topics; 0 = no topic
+  silent: false          # send without notification sound
+  proxy: ""              # HTTP proxy "host:port" if Telegram is unreachable from the server; empty = no proxy
+  api-url: "https://api.telegram.org"   # custom Bot API address (mirror), if needed
+  notify:
+    punish: true
+    reports: true
+    threshold: true
+    network: true
+
+# Violation history: stored in plugins/GuardX/history/ and available after a restart (/guardx history <name> [page])
+history:
+  persist: true          # false = keep in memory only until the player leaves
+  max-entries: 500       # how many latest entries to keep per player
+  retention-days: 30     # files of players with no new violations for this long are deleted; 0 = never delete
+
+# Server network: a shared database of cheat bans. If a player was banned on one server of the network, moderators get an alert
+# when that player joins another one (chat with guardx.alerts, Discord, Telegram). There is no automatic ban: the moderator decides.
+# All servers of the network need one shared MySQL/MariaDB and different server-id values. sqlite only works inside one server (for testing).
+# Commands: /guardx netcheck <name> (player's bans in the network), /guardx netrevoke <name> (remove records if the ban was a mistake).
+network:
+  enabled: false
+  server-id: "server-1"      # unique name of THIS server in the network (different on every server)
+  storage:
+    type: mysql              # mysql | sqlite
+    host: "localhost"
+    port: 3306
+    database: "guardx"
+    user: "guardx"
+    password: ""
+    use-ssl: false
+    table-prefix: "guardx_"
+    file: "network.db"       # sqlite only
+  # What counts as a ban: the first word of the punishment command (punish.command / punish.repeat.command).
+  # Empty list = record any punishment, including kick.
+  record-commands: [ban, tempban, ipban, banip, tempipban, tempbanip]
+  include-own-server: false  # true = also warn about records made on this same server
+  alert-cooldown-minutes: 10 # do not repeat the alert about one player more often than this
+  retention-days: 180        # older records are deleted; 0 = never delete
+  # Bans and unbans issued by admins with commands (in game and from the console) are recorded in the network too.
+  # In game the permission guardx.network.ban is required (op by default); console commands are always counted.
+  # GuardX's own bans and the commands the plugin runs itself are not counted twice.
+  admin-bans:
+    enabled: true
+    commands: [ban, tempban]            # which commands count as a ban (first word, without /)
+    unban-commands: [unban, pardon]     # an unban removes the player's records in the network (if auto-revoke: true)
+    auto-revoke: true
+    reason-contains: []                 # empty = any ban; otherwise only if the command contains one of the words, e.g. [cheat, hack]
+  # Optional: console command when such a player joins. %player%, %server%, %check%. Empty = alert only.
+  join-command: ""
+  # Ban evasion via a new account: only a SHA-256 hash of the IP is stored (salt + address), never the IP itself.
+  # The same ip-salt must be set on every server of the network, otherwise hashes won't match.
+  ip-match: true
+  ip-salt: ""
+  # Heightened watch: while a player has a fresh network record, their VL grows faster.
+  suspect-minutes: 10
+  suspect-vl-multiplier: 1.5
+  # Digest: a moderator with guardx.alerts sees recent network alerts on join.
+  digest-minutes: 30        # how far back to show; 0 = disabled
+  digest-count: 5           # how many latest alerts to show
+  # Ban sync: banned on one server of the network = banned on all of them.
+  # Disabled by default: enable only if you are sure punish.command is equally strict on every server.
+  sync-bans: false
+  sync-command: ""          # console command run when a network-banned player joins. %player%, %server%, %check%, %info%
+
+# Layers: rules that disable some checks entirely (not computed, no VL, no punishment) where and for whom you choose.
+# A layer applies when ALL of its conditions are met. Optional: worlds, min+max (area), permission.
+#   name: label (shown in /guardx layers)
+#   worlds: list of worlds; empty = any world
+#   min / max: area corners [x, y, z]; set both together
+#   permission: the layer only applies to players with this permission (e.g. for a VIP arena)
+#   checks: list of checks ("speed", "fly", ...) or "*" for all
+# Example:
+# layers:
+#   - name: pvp-arena
+#     worlds: [arena]
+#     checks: [reach, killaura, velocity]
+#   - name: spawn-parkour
+#     worlds: [world]
+#     min: [-50, 60, -50]
+#     max: [50, 120, 50]
+#     checks: [speed, fly, step]
+layers: []
+
+# Packet layer (Timer, AutoClicker, Aim, NoSwing, BadPackets, PacketFlood, ActionSpam, KillAura multi-target).
+# PacketEvents is NOT required. The backend mode:
+#   auto         - PacketEvents if it is installed and running, otherwise the built-in Netty layer (default)
+#   packetevents - PacketEvents only (the built-in layer is used if it is missing)
+#   native       - always the built-in layer, PacketEvents is ignored
+#   off          - packet checks are disabled, everything else keeps working
+packets:
+  backend: auto
+
+checks:
+  # ---------- checks on server events (Bukkit) ----------
+
+  speed:
+    enabled: true
+    punish-vl: 15
+    max-ground: 0.42      # blocks/tick when running on the ground (sprint ~0.28)
+    max-air: 0.55         # blocks/tick while jumping
+    ice-multiplier: 2.2   # margin on ice
+    buffer: 5
+    avg-window: 20        # how many moves are averaged (~1 second)
+    max-avg: 0.42         # max average speed (b/tick, without potions; sprint-jumps ~0.36)
+    avg-buffer: 10
+
+  fly:
+    enabled: true
+    punish-vl: 10
+    max-rise: 1.35        # max jump height above the ground (with margin)
+    jump-boost-per-level: 0.6
+    predict-tolerance: 0.04
+    buffer: 4
+
+  nofall:
+    enabled: true
+    punish-vl: 10
+    buffer: 3
+    min-dy: 0.08          # minimum fall speed for a spoof to count
+    min-air-ticks: 5      # ticks the player must have been airborne (server-side) or it's just a packet glitch
+    ascend: false         # also catch onGround=true while rising (NoFall cheats keep the ground flag constantly); half buffer per tick
+    ascend-dy: 0.15
+
+  reach:
+    enabled: true
+    punish-vl: 8
+    max-distance: 3.15    # vs players: vanilla 3.0 + margin (ping is handled separately, see lag-compensation)
+    max-distance-mob: 3.5 # no compensation for mobs, so the margin is larger
+    cancel-invalid-hits: true
+    buffer: 3
+
+  scaffold:
+    enabled: true
+    punish-vl: 10
+    max-per-second: 14
+    rate-buffer: 4          # consecutive rate exceedances needed for VL (a packet burst after lag doesn't punish instantly)
+    max-angle: 65           # max angle between look direction and target block (degrees)
+    hard-angle: 100         # angle above this cancels the placement immediately
+    ray-distance: 6.0
+    cancel-invalid-places: true
+    buffer: 4
+    face: true              # reject clicks on faces pointing away from the player's eyes
+    face-tolerance: 0.5     # tolerance (blocks): server position lags one tick
+    face-buffer: 2
+
+  scaffold_folding:
+    enabled: true
+    punish-vl: 0               # 0 = alerts only. The check works properly for the first time in v5: watch for false flags first
+    sample-window-ms: 250      # max delay between a camera turn and a block placement
+    analysis-window-ms: 1800   # window for counting sharp turns
+    min-yaw-change: 42.0       # minimum yaw change
+    max-pitch-change: 28.0     # maximum pitch change (nearly horizontal view)
+    required-turns: 4          # sharp turns needed within the window
+    min-horizontal-speed: 0.08 # player must be moving
+    buffer: 3.0
+    buffer-decay: 0.20
+    vl: 1.0
+
+  norotate:
+    enabled: true         # client ignores the camera rotation set by the server on teleport
+    punish-vl: 0          # 0 = alerts only. Do not enable punishment until you have tested on real players
+    min-change: 45        # only teleports that turned the player by at least this many degrees are checked
+    tolerance: 25         # allowance (degrees) for mouse movement before the client replies; ping * 0.2 is added
+    window-ms: 3000       # how long to wait for the client's reply after a teleport
+    buffer: 2
+
+  step:
+    enabled: true
+    punish-vl: 8
+    max-step: 0.65        # step 0.6 / jump 0.42 (+0.1 per Jump Boost level)
+    buffer: 2
+
+  jesus:
+    enabled: true         # walking on water/lava
+    punish-vl: 8
+    ticks: 8              # suspicious ticks needed in a row
+    min-speed: 0.1        # minimum horizontal speed (b/tick)
+    hover: 0.5            # how far above the liquid surface a cheater may hover
+    submerge: 0.25        # how deep below the surface the feet block may be
+    max-tick-dy: 0.1      # max vertical shift per tick inside the streak
+    flat-range: 0.2       # max total height range over the streak (a swimmer's is larger)
+
+  noslow:
+    enabled: true         # sprinting while eating/blocking/drawing a bow. Disable if you have items with custom slowdown
+    punish-vl: 10
+    max-speed: 0.15       # in vanilla ~0.04 b/tick while using an item
+    buffer: 8
+
+  velocity:
+    enabled: true         # ignored knockback (AntiKB)
+    punish-vl: 6
+    min-vertical: 0.25
+    extra-ms: 600         # how long to wait for a reaction after ping
+    burst-ms: 2500        # max hit-burst length: evaluation is forced after this so spam damage cannot disable the check
+    pass-ratio: 0.5       # share of the expected height that must be gained to count as legit
+    check-horizontal: false  # also catch ignored horizontal knockback (noisy due to WASD — enable with care)
+    min-horizontal: 0.15  # minimum horizontal velocity component for this check
+    hor-pass-ratio: 0.3   # share of expected displacement along the KB direction
+    buffer: 3
+
+  nuker:
+    enabled: true         # too many block breaks started per second
+    punish-vl: 8
+    max-per-second: 12
+    min-hardness: 0.1     # blocks softer than this (snow, vines, etc.) and all non-solid blocks are ignored: they break instantly
+    cancel-invalid: true
+
+  momentum:
+    enabled: true         # movement physics: shift per tick <= inertia * friction + max acceleration
+    punish-vl: 12
+    tolerance: 0.03       # margin for pushes and inaccuracies; accumulates tick to tick: 0.03 ≈ steady-state speed ceiling of 0.35 b/tick (sprint 0.28)
+    buffer: 5
+
+  strafe:
+    enabled: true         # air control: the shift vector changes by no more than 0.026 per tick
+    punish-vl: 10
+    tolerance: 0.02
+    min-speed: 0.08       # only fast movement is checked (otherwise move events may merge)
+    buffer: 4
+
+  sprint:
+    enabled: true         # OmniSprint: sprinting not forward (backwards or sideways)
+    punish-vl: 8
+    min-speed: 0.22
+    max-angle: 100        # degrees between the movement and the look direction
+    ticks: 6
+    buffer: 2
+
+  spider:
+    enabled: true         # too-fast climbing of ladders and vines (vanilla ~0.118 b/tick)
+    punish-vl: 8
+    max-avg: 0.17
+    window: 10
+    buffer: 2
+
+  invmove:
+    enabled: true         # moving with a container open. Better disabled with Geyser/Bedrock players
+    punish-vl: 8
+    min-speed: 0.12
+    ticks: 8
+
+  multiaction:
+    enabled: true         # attacking while eating/blocking/drawing a bow (the client doesn't allow it)
+    punish-vl: 8
+    grace-ms: 250
+    buffer: 3
+    cancel-invalid-hits: true
+
+  fastbow:
+    enabled: true         # shooting a bow with high force without the required draw time
+    punish-vl: 8
+    ratio: 0.75
+    slack-ms: 100
+    buffer: 3
+    cancel-invalid: true
+
+  blockreach:
+    enabled: true         # placing/breaking blocks beyond reach (4.5 in survival)
+    punish-vl: 8
+    max-distance: 4.9
+    buffer: 3
+    cancel-invalid: true
+
+  inventory:
+    enabled: true
+    punish-vl: 18
+    window-ms: 1000
+    max-clicks-per-window: 45
+    buffer: 5
+
+  fastbreak:
+    # Disabled by default: depends on version, tools, enchantments and server mechanics.
+    enabled: false
+    punish-vl: 20
+    min-interval-ms: 65
+    required-consecutive: 7
+
+  # ---------- checks on packets (PacketEvents or built-in layer) ----------
+
+  killaura:
+    enabled: true
+    same-tick-window-ms: 35  # two hits on different targets closer than this are treated as one client tick (1.21.2+ clients don't send a position packet when standing still)
+    punish-vl: 10
+    hitbox: true             # the look ray must hit the target's hitbox
+    hitbox-expand: 0.35      # margin around the hitbox (blocks): lag, mouse movement between ticks
+    check-walls: true
+    cancel-invalid-hits: true  # cancel hits through walls and on a second target within one tick
+    buffer: 4
+
+  # Combat hit speed. The "full hit" limit = weapon attack_speed (sword ~1.6/s, axe ~0.8-3.1/s, fist ~4/s).
+  cps:
+    enabled: true
+    punish-vl: 12
+    cps-multiplier: 2.5   # all hits (incl. weak ones on cooldown) must not exceed attack_speed * this
+    full-multiplier: 1.3  # "full" hits (charge >= full-charge) must not exceed attack_speed * this — the main detection
+    full-charge: 0.9      # cooldown fraction at which a hit counts as "full"
+    sweep-window-ms: 50   # hits closer than this = one swing (Sweeping Edge)
+    buffer: 3
+
+  noswing:
+    enabled: true            # attack without arm swing
+    punish-vl: 8
+    buffer: 5
+
+  autoclicker:
+    enabled: true
+    punish-vl: 10
+    max-cps: 20
+    samples: 30
+    min-cps-consistency: 8
+    min-deviation-ms: 6.0    # too-even clicks = autoclicker
+
+  timer:
+    enabled: true
+    punish-vl: 8
+    max-balance: 400         # how many ms of "surplus time" are allowed
+    min-balance: -1000       # how many ms of idle time "accumulate" (needed for network lag)
+
+  badpackets:
+    enabled: true            # impossible values in packets (NaN, coordinates outside the world, pitch > 90°, hotbar slot outside 0-8)
+    punish-vl: 6
+
+  packetflood:
+    enabled: true            # too many packets per second (flood crash, "packet" cheats)
+    punish-vl: 6
+    max-per-second: 450      # vanilla is usually 20-100, can be higher with fast crafting/inventory use
+    cancel-excess: true      # excess packets over the limit never reach the server
+
+  actionspam:
+    enabled: true            # frequent sneak/sprint toggling (action packets)
+    punish-vl: 12
+    max-per-second: 50
+
+  # ---------- additional checks ----------
+
+  aim:
+    enabled: true            # aimbot/spinbot: analysis of camera rotations (combat only)
+    punish-vl: 30            # high threshold: the GCD check can be wrong with non-standard mice/screen scaling
+    combat-ms: 2000          # how many ms after a hit count as combat
+    skip-bedrock: true       # skip Bedrock players (Geyser/Floodgate): touch and gamepad rotations aren't multiples of the mouse step
+    constant-count: 8        # this many identical rotations in a row = spinbot
+    min-delta: 2.0           # minimum rotation (degrees) from which "identical" ones are counted
+    gcd:
+      enabled: true          # mouse rotations are multiples of the sensitivity step (>= 0.0096°); aimbots don't follow this
+      samples: 20
+      min-step: 0.004
+      buffer: 6
+
+  phase:
+    enabled: true            # head inside a solid block (NoClip / Phase)
+    punish-vl: 8
+    buffer: 2
+
+  criticals:
+    enabled: true            # critical hit from the ground (fake micro-jumps)
+    punish-vl: 10
+    max-fall: 0.5
+    buffer: 3
+
+  fastuse:
+    enabled: true            # too-fast eating/potions. Disable if you have plugins with custom food
+    punish-vl: 8
+    min-ms: 500              # the fastest in vanilla is 800 ms (dried kelp)
+    buffer: 2
+    cancel-invalid: true
+
+  # ---------- new checks (1.0.0) ----------
+
+  elytra:
+    enabled: true            # speed while using an elytra (players with elytra used not to be checked at all)
+    punish-vl: 10
+    max-speed: 4.5           # blocks/tick (full speed including falling and fireworks)
+    buffer: 3
+
+  foodsprint:
+    enabled: true            # sprinting while food <= 6 or while blind (the vanilla client can't do this)
+    punish-vl: 10
+    buffer: 12
+
+  xray:
+    enabled: true
+    punish-vl: 0             # no punishment: alerts only
+    window: 400              # how many rock blocks accumulate in the sliding window
+    min-rock: 120            # minimum rock before the ratio is evaluated
+    max-ratio: 0.04          # maximum share of exposed hidden ores
+    buffer: 3                # how many times the threshold must be exceeded
+    # Replace ores with plain "stone" for a caught cheater (only their client sees it, the server world is untouched).
+    # Ores exposed legitimately are restored as normal blocks.
+    spoof-on-flag: true
+    spoof-radius: 14         # scan radius around the player
+    spoof-respoof-seconds: 120  # how often to re-run the spoof on new flags
+    spoof-block: ""          # replacement block; empty = auto: stone/netherrack/end_stone per dimension
+    ores:                    # ores counted as "exposed" (empty = default list)
+    rock:                    # blocks counted as rock (empty = default list)
